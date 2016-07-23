@@ -100,128 +100,114 @@ plot(seq_len(niter), as.matrix(mcmc$mvSamples)[,1], type = 'l')
 
 While educational, the exponential example is not particularly interesting given NIMBLE already provides that distribution.  Let's consider an example where using a user-defined distribution can improve MCMC performance (run time and sampling efficiency).
 
-When working with multinomial data, the Dirichlet distribution can be used to relate the probability vector in the multinomial to covariates and to induce over-dispersion.
+Consider a basic Gaussian process model for spatial smoothing and prediction.
 
-One context in which this comes up is topic modeling. You might have textual data from multiple documents, with each document being about a topic. The probabilities of words in each document in a topic can be represented as being a sample from a Dirichlet distribution for that topic.  
-
-Another context is modeling of use of discrete resources by organisms.
-
-# Basic topic model 
-
-A (very) basic model might look like this.
-
-<center><img src="figures/topicModel.jpg"></center>
-
-```{r, multi}
-code <- nimbleCode({
-for(i in 1:n) {
-  # likelihood - word counts
-  y[i, 1:K] ~ dmulti(p[i,1:K], N[i])
-  # latent process (random effects) - topic model
-  p[i, 1:K] ~ ddirch(alpha[topic[i], 1:K])
-}
-# prior for hyperparameters
-for(tp in 1:M)
-  for(k in 1:K)
-  alpha[tp, k] ~ dunif(0, 100)
-})
-
-const <- list(M = 2, K = 4, n = 5, N = rep(1000, 5),
-      topic = c(1, 1, 1, 2, 2))
-alphaInits <- rbind(c(10, 30, 100, 3), c(12, 15, 15, 8))
-m <- nimbleModel(code, constants = const, 
-  inits = list(alpha = alphaInits))
-```
-
-Note that with those `alpha` values, the third word is very common in topic 1, while in topic 2, the second and third words are equally common. 
-
-```{r, multi-simulate}
-set.seed(0)
-m$simulate(c('p', 'y'))
-m$p
-m$y
-```
+$$
+y_i \sim N(g_i, \tau^2)
+$$
+$$
+g \sim \mbox{MVN}(\mu 1, \sigma^2 C(\rho))
+$$
+$$
+C_{i,j} = \sigma^2 \exp\left(-\frac{\|x_i - x_j\|}{\rho}\right)
+$$
 
 
+# Integrating out the unknown process
 
-# The Dirichlet-multinomial distribution
+In this case we can analytically integrate over the random process because we have normal data and a normal prior (i.e., we could do conjugate sampling for *g*). 
 
-Those of you familiar with Gibbs sampling may recognize that with a multinomial likelihood and Dirichlet prior, you can analytically integrate over `p[topic, ]` for all topics. This eliminates a layer in the model and should improve MCMC performance by reducing dependence amongst the model parameters and by simply reducing the number of parameters needing to be sampled.
+Doing this integral gives us a multivariate normal density for the data with a particular structured covariance. 
 
-Integrating over the proportions gives the Dirichlet-multinomial distribution, whose [density](https://en.wikipedia.org/wiki/Dirichlet-multinomial_distribution#For_a_multinomial_distribution_over_category_counts) involves a heap of gamma functions. 
+$$
+y \sim \mbox{MVN}(\mu 1, \tau^2 I + \sigma^2 C(\rho))
+$$
 
-# Dirichlet-multinomial nimbleFunctions
+This eliminates a layer in the model and should improve MCMC performance by reducing dependence amongst the model parameters and by simply reducing the number of parameters needing to be sampled. 
+
+# Gaussian process nimbleFunctions
 
 Here's how we'd write the density ('d') and simulation ('r') nimbleFunctions for this distribution. 
 
 Note that in this example we have that the random variable and the parameter are one-dimensional arrays (vectors), so we need to indicate that.
 
 ```{r, dirchmulti}
-ddirchmulti <- nimbleFunction(
-            run = function(x = double(1), alpha = double(1), size = double(0),
-                log = integer(0, default = 0)) {
-
+dgp <- nimbleFunction(
+            run = function(x = double(1), dists = double(2), mu = double(0), 
+                             tau = double(0), sigma = double(0), rho = double(0), 
+                             log = integer(0, default = 0)) {
                 returnType(double(0))
-                logProb <- lgamma(size) - sum(lgamma(x)) + 
-                        lgamma(sum(alpha)) -
-                        sum(lgamma(alpha)) + sum(lgamma(alpha + x)) - 
-                        lgamma(sum(alpha) + size)
-                if(log) return(logProb)
-                        else return(exp(logProb))
+
+                C <- sigma^2 * exp(-dists/rho)
+                p <- length(x)
+
+                for(i in 1:p) 
+                      C[i,i] <- C[i,i] + tau^2
+
+                U <- chol(C)
+                x <- x - mu
+                tmp <- forwardsolve(t(U), x)
+                out <- -p*log(2*3.1415926)/2
+                for(i in 1:p)
+                      out <- out - log(U[i,i]) - 0.5*tmp[i]^2  
+                if(log) return(out) else return(exp(out))
 })
 
-rdirchmulti <- nimbleFunction(
-            run = function(n = integer(0), alpha = double(1), 
-                size = double(0)) {
-
+rgp <- nimbleFunction(
+            run = function(n = integer(0), dists = double(2), mu = double(0), 
+                           tau = double(0), sigma = double(0), rho = double(0)) {
                 returnType(double(1))
-                if(n != 1) print("rdirchmulti only allows n = 1; using n = 1.")
-                p <- rdirch(1, alpha)
-                return(rmulti(1, size = size, prob = p))
+                if(n != 1) print("rgp only allows n = 1; using n = 1.")
+                C <- sigma^2 * exp(-dists/rho)
+                p <- dim(dists)[1]
+                devs <-numeric(p, init = FALSE)
+                for(i in 1:p) {
+                      C[i,i] <- C[i,i] + tau^2
+                      devs[i] <- rnorm(1)
+                }
+                U <- chol(C)
+                out <- mu + t(U) %*% devs
+                return(out[,1])
 })
 ```
 
 ```{r, scopefix2, echo=FALSE}
 # not clear why ddirchmulti() not being put into global
 # if this isn't done, registerDistributions fails to find ddirchmulti in knitr
-assign('ddirchmulti', ddirchmulti, .GlobalEnv)
-assign('rdirchmulti', rdirchmulti, .GlobalEnv)
+assign('dgp', dgp, .GlobalEnv)
+assign('rgp', rgp, .GlobalEnv)
 ```
 
-```{r, register-dirchmulti}
+```{r, register-gp}
 registerDistributions(list(
-        ddirchmulti = list(
-        BUGSdist = "ddirchmulti(alpha, size)",
-        types = c('value = double(1)', 'alpha = double(1)'))
+        dgp = list(
+            BUGSdist = "dgp(dists, mu, tau, sigma, rho)",
+            types = c('value = double(1)', 'dists = double(2)', 'mu = double(0)',
+              'tau = double(0)', 'sigma = double(0)', 'rho = double(0)')
+              )
 ))
 ```
 
+
 # Using the user-defined distribution
 
-We can now rewrite the topic model as follows. We won't apply this to a real dataset, but one could now use this rewritten model in an algorithm such as MCMC, as in one of the exercises.
+We can now write the model for data as follows. We won't apply this to a real dataset, but one could now use this rewritten model in an algorithm such as MCMC. Or we could maximize the marginal likelihood -- recall the optimization example when we [first talked about nimbleFunctions](nimbleFunctions_slides.html).
 
-```{r, dirmulti-topic}
-code2 <- nimbleCode({
-for(i in 1:n)
-  # likelihood 
-  y[i,1:K] ~ ddirchmulti(alpha[topic[i], 1:K], N[i])
-# priors for hyperparameters
-for(tp in 1:M)
-  for(k in 1:K)
-  alpha[tp, k] ~ dunif(0, 100)
+```{r, gp-example}
+code <- nimbleCode({
+     y[1:n] ~ dgp(dists[1:n,1:n], mu, tau, sigma, rho)
+     mu ~ dnorm(0, sd = 100)
+     tau ~ dunif(0, 10)
+     sigma ~ dunif(0, 1)
+     rho ~ dunif(-10, 10)
 })
-m2 <- nimbleModel(code2, constants = const,
-  inits = list(alpha = alphaInits))
-set.seed(0)
-m2$simulate('y')
-m2$y
+
+n <- 50
+locs <- cbind(runif(n), runif(n))
+library(fields, quietly = TRUE)
+dd <- rdist(locs)
+m <- nimbleModel(code, constants = list(n = n,dists = dd), 
+                       inits = list(mu = 0, tau = 1, sigma = 1, rho = 0.5))
 ```
 
 
-# Final thoughts
-
-In real document analysis, you would want to infer topics for unlabelled documents. This would require having discrete variables be the random (unknown) indices of `alpha` that indicate the unknown topic of each such document, but at the moment, NIMBLE does not allow for random indices. 
-
-Also, a standard model for topic analysis, called *latent Dirichlet allocation*, allows each document to be a mixture of topics. One could expand the code here to allow for that. 
-
-Another kind of useful distribution to define is a zero-inflated distribution, for which there is an example on our [web site](r-nimble.org/examples).
