@@ -1,0 +1,197 @@
+---
+title: "Flexible programming with BUGS models: Using NIMBLE for MCMC and beyond"
+subtitle: "NIMBLE module for NCAR Environmental Data Analytics 2016 short course"
+author: "Chris Paciorek, Department of Statistics, UC Berkeley"
+output:
+  html_document:
+    code_folding: show
+---
+
+# A few administrative things
+
+## Where to find stuff
+
+The Github site ([https://github.com/paciorek/nimble-eda-2016](https://github.com/paciorek/nimble-eda-2016)) is the master repository for materials for the modules; you can also get the individual files from Github. 
+
+To get the materials look ahead to slide 6 for instructions. Alternatively, simply go to [https://github.com/paciorek/nimble-eda-2016](https://github.com/paciorek/nimble-eda-2016) and click on the 'Download ZIP' button in the right side of the window or simply click [here](https://github.com/paciorek/nimble-eda-2016/archive/master.zip).
+
+## Asking questions and making comments
+
+Please ask questions as we go through the material. You can also make comments and share ideas, code snippets, and error messages as we go through the material via the online shared document (Etherpad) at [https://public.etherpad-mozilla.org/p/nimble-eda-2016](https://public.etherpad-mozilla.org/p/nimble-eda-2016). 
+
+# How we'll operate
+
+The NIMBLE material will be organized in modules, each of which will be a combination of lecture/demo presentation, in some cases followed by a short breakout session in which you'll have a chance to work on some of the problems in the *exercises.html* file.
+
+# Suggestions on how to get the most out of the sessions.
+
+I encourage you to:
+
+- try out the code as we walk through it
+-  keep your eyes open! -- We'll illustrate a lot of syntax and concepts by example
+- try to guess what the syntax means in cases we haven't yet seen that syntax
+- play with it and try variations and try to break it and see what happens
+- ask questions 
+
+
+A few additional thoughts on my pedagogical philosophy here:
+
+- I want to expose you to a lot of tools and ideas that you can come back to when you need them and when you have time for more depth.
+- My aim is not to show you how to use specific statistical methods or analysis techniques. My goal is to get you up to speed generally in NIMBLE.
+- It can be hard to absorb everything in such a concentrated situation. Hopefully the material presented will be useful to you over the longer-term as you do more work with NIMBLE.
+
+# RStudio and R Markdown
+
+We'll present most of the material from within RStudio, using R Markdown documents with embedded R code. R Markdown is an extension to the Markdown markup language that makes it easy to write HTML in a simple plain text format.  This allows us to both run the R/NIMBLE code directly as well as compile on-the-fly to an HTML file that can be used for presentation. All files will be available on [Github](https://github.com/paciorek/nimble-eda-2016).  
+
+Note: The files named *foo_slides.html* have individual slides, while the files named *foo.html* have the same content but all on one page.
+
+Warning: in some cases the processing of the R code in the R Markdown is screwy and the slides have error messages that do not occur if you just run the code directly in R or RStudio. 
+
+# Getting the workshop materials
+
+To download the files, you can do the following. 
+
+## From a browser
+
+Simply go to [https://github.com/paciorek/nimble-eda-2016](https://github.com/paciorek/nimble-eda-2016) and click on the 'Download ZIP' button in the right side of the window or simply click [here](https://github.com/paciorek/nimble-eda-2016/archive/master.zip).
+
+## Within RStudio
+
+Within RStudio go to File->New Project->Version Control->Git and enter:
+
+- "Repository URL": https://github.com/paciorek/nimble-eda-2016
+- "Project Directory Name": nimble-eda-2016 (or something else of your choosing)
+- "Directory": ~/Desktop (or somewhere of your choosing)
+
+Then to update from the repository to get any changes we've made, you can select (from within RStudio):
+Tools->Version Control->Pull Branches
+
+or from the Environment/History/Git window, click on the Git tab and then on the blue down arrow.
+
+Be warned that you probably do not want to make your own notes or changes to the files we are providing. Because if you do, and you then do a "Git Pull" to update the materials, you'll have to deal with the conflict between your local version and our version. You probably will want to make a personal copy of such files in another directory or by making copies of files with new names.
+
+## From a terminal window
+
+Run the following commands:
+
+- `cd /directory/where/you/want/repository/located`
+- `git clone https://github.com/paciorek/nimble-eda-2016`
+
+Then to update from the repository to get any changes we've made:
+
+- `cd /directory/where/you/put/the/repository/nimble-eda-2016`
+- `git pull`
+
+# Installing NIMBLE
+
+NIMBLE is not yet on CRAN (we are ever-so-close), so you need to download it from our website, [http://r-nimble.org/download](http://r-nimble.org/download). More details can also be found in Section 4 of the [NIMBLE manual](http://r-nimble.org/manuals/NimbleUserManual.pdf). 
+
+In summary, here are the steps.
+
+1. Install compiler tools on your system. Section 4.3 of the manual
+describes how to install *Rtools* on Windows and how to install the
+command line tools of *Xcode* on a Mac.
+2. install the *igraph* and *coda* packages (these are available on CRAN so you can
+install in the usual way)
+3. install the *nimble* package as follows (the note in the manual about
+it being on CRAN is _not_ correct) after starting R:
+  ```install.packages("nimble", repos = "http://r-nimble.org",``` 
+     ```     type = "source")```
+
+
+# What is NIMBLE?
+
+- A system for using algorithms on hierarchical statistical models
+- A system for programming algorithms to be used on hierarchical models
+- A partial compiler for math, flow control, and related syntax in R
+- A flexible extension of the BUGS and JAGS systems
+
+We have an extensive website [r-nimble.org](r-nimble.org) with fairly comprehensive User Manual, examples, and other information. 
+
+# Why NIMBLE?
+
+Here are some of the features you can do in NIMBLE that we are most excited about and that distinguish NIMBLE from other software:
+
+- customize your MCMCs, including choosing what parameters to block
+- define your own distributions and functions for use in BUGS code
+- use a variety of algorithms on your model, including MCMC, sequential Monte Carlo (particle filtering), and MCEM
+- write an algorithm in our system for easy dissemination to others, including your own MCMC sampler
+- compile mathematical operations in R without needing to know or write C or C++
+
+# Why Not NIMBLE?
+
+* For MCMCs that rely heavily on Gibbs sampling, JAGS may be faster because of more efficient internal implementation of the calculations.
+* For certain model structures, Hamiltonian Monte Carlo, such as implemented in Stan, may work better than the default MCMC samplers in NIMBLE (but in many examples we've tried we've been able to achieve comparable or better performance with some relatively simple modifications to the model or the MCMC samplers).
+* NIMBLE does not (yet) allow for stochastic indexing; JAGS is your best bet for that.
+* NIMBLE can take a long time to build models that have tens of thousands or more nodes (though once built, the algorithm run times can be quite good). We anticipate big improvements in future versions of NIMBLE, including the version we are about to release in the next few weeks.
+
+# What are my other options? 
+
+* For MCMC:
+  1. [JAGS](http://mcmc-jags.sourceforge.net)
+  2. [Stan](http://mc-stan.org)
+  3. [PyMC](https://pymcmc.readthedocs.org/en/latest/)
+* various sequential Monte Carlo packages
+  1. [POMP](http://kingaa.github.io/pomp)
+  2. [LibBI](http://libbi.org)
+  3. [BIIPS](https://alea.bordeaux.inria.fr/biips/doku.php?id=home)
+  4. [SMC](https://cran.r-project.org/web/packages/SMC/index.html)
+* various tools for a variety of algorithms in R, Python, Matlab, etc.
+
+# Getting help with NIMBLE
+
+* Post to the [NIMBLE user group](https://groups.google.com/forum/#!forum/nimble-users)
+* Email [nimble.stats@gmail.com](the NIMBLE development team)
+* Follow announcements via the [NIMBLE announcements list](https://groups.google.com/forum/#!forum/nimble-announce)
+
+# Participating in NIMBLE
+
+* File bug reports or feature requests as [Github issues](https://github.com/nimble-dev).
+* Email [nimble.stats@gmail.com](the NIMBLE development team) if you're interested in participating in the development of NIMBLE. 
+* We have a new NSF grant for further software development of the NIMBLE core code, and we're looking for a good programmer.
+* Develop an algorithm using NIMBLE and either share it with us (e.g., by a Git pull request or more informally) or develop an R package that depends on NIMBLE.
+* We have funding to bring selected users to Berkeley for intensive collaboration; contact us if you have an interesting use for NIMBLE in mind and want to explore possibilities with us.
+
+# The Legal Stuff
+
+- This material was created by the NIMBLE development team and is licensed under a Creative Commons Attribution 3.0 Unported License. You are free to use, modify, and redistribute any of this material with attribution.
+
+# Modules
+
+Here are the modules we'll work through for this workshop, though we probably won't get to all of them. With the exception of the BUGS language and Using JAGS modules, the remaining modules are specific to NIMBLE.
+
+ - Introduction to BUGS, JAGS, and NIMBLE
+    1. [The BUGS language](bugs_language_slides.html)
+    2. [Using JAGS](run_jags_slides.html)
+    3. [Building a model in NIMBLE](build_model_slides.html)
+    4. [MCMC concepts](mcmc_concepts_slides.html)
+    5. [Running an MCMC in NIMBLE](run_mcmc_slides.html)
+    6. [Customizing an MCMC](customizing_mcmc_slides.html)
+    7. [Exercises (Using and customizing MCMC)](exercises.html)
+ - Introduction to programming in NIMBLE
+    7. [Programming with models (I): Operating a NIMBLE model](operating_model_slides.html)
+    8. [Programming with models (II): Understanding and querying model structure](model_structure_slides.html)
+    9. [Programming with models (III): Compiling simple math from R to C++](compile_R_slides.html)
+    10. [Programming with models (IV): model-generic two-stage programming](nimbleFunctions_slides.html)
+    11. [Exercises (Operating a model and compiling R code)](exercises.html)
+ - Using NIMBLE
+    12. [Providing new distributions for use in BUGS](user_dist_slides.html)
+    13. [Writing your own MCMC sampler](user_sampler_slides.html)
+    14. [MCEM and approaches for integrating over the latent process](run_mcem_slides.html)
+    15. [Exercises (User-defined samplers and distributions)](exercises.html) or try out NIMBLE on the working group projects
+
+Exercises can be found [here](exercises_slides.html).
+    
+Other topics:
+
+1. [Specifying data for a model](data_nodes_slides.html)
+2. [Using constants in a model](constants_slides.html)
+4. [Alternative parameterizations](alt_param_slides.html)
+3. [Indexing](indexing_slides.html)
+4. [Vectorizing BUGS code](vectorizing_slides.html)
+5. [User-defined functions in BUGS code](user_function_slides.html)
+6. [An extended MCMC example](litters_example_slides.html)
+
+
+

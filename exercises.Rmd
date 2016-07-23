@@ -1,0 +1,103 @@
+# Using and customizing MCMC
+
+Let's try fitting the non-linear regression of CO2 on depth in a Bayesian fashion.
+
+1) Write BUGS code for the statistical model.
+
+2) Setup the model in NIMBLE. The data are in `CO2.csv` in the repository.
+
+3) Run a basic MCMC. What do you notice about burn-in and mixing?
+
+4) Can you think of ways to come up with more informative initial values for the model?
+
+5) Try customizing the MCMC for better performance.
+
+6) Suppose you wanted to consider the predictive distribution for new observation at a given depth.
+    - Create a new version of the model that allows for this.  
+    - Set the data for the new model such that the new observation is missing and not treated as a data node.
+    - Set up an MCMC for the new model. What kind of sampling should happen for the new pump failures? 
+
+# Operating a model
+
+1) Using the CO2 non-linear regression or (perhaps better) a model that has some hiearchical structure, including random effects, experiment with setting the hyperparameters and simulating into the rest of the model. Explore how changes in the hyperparameters affect the data that are generated.
+
+Note that to simulate into data nodes, you'll need to use the *includeData* argument when calling the *simulate* method. Otherwise, by default NIMBLE will not overwrite data values.
+
+2) Write code that sets up the replicated datasets for a simulation study, simulating many times from the model.
+
+# Compiling R code
+
+1) Let's consider using a nimbleFunction to replace a for loop that can't be avoided in R. Write a second order random walk using a nimbleFunction. Here's the code for the R version. 
+
+```{r, markov-exer, eval=FALSE}
+set.seed(0)
+n <- 1e6
+path <- rep(0, n)
+rho1 <- .8
+rho2 <- .1
+path[1:2] <- rnorm(2)
+print(system.time(
+for(i in 3:n)
+      path[i] <- rho1*path[i-1] + rho2*path[i-2] + rnorm(1)
+))
+tsplot(path[1:5000])
+```
+
+Now fill out the nimbleFunction version and test the timing.
+
+```{r, markov-exer-scaffold, eval=FALSE}
+mc <- nimbleFunction(
+   run = function( ... ) ) {
+       returnType( ... )
+       ...
+       return(...)
+})
+cmc <- compileNimble(mc)
+set.seed(0)
+system.time(path <- cmc(n, rho1, rho2))
+```
+
+2) Generalize your code to work for an arbitrary order of dependence.
+
+3) Use *nimStop()* as part of an error check that ensures that the length of the path to be sampled is longer than the order of the dependence. 
+
+# User-defined samplers and distributions
+
+1) Write a user-defined sampler that modifies NIMBLE's default Metropolis (*sampler_RW()*) sampler to use a gamma proposal distribution and includes the ratio of the proposal distributions (the Hastings adjustment) for a non-symmetric proposal distribution. Have your proposal centered on the mean of the gamma distribution. When you call *rgamma* in the run function, you'll want to use the {mean, sd} alternative parameterization of the  gamma distribution.
+
+2) Write the Pareto distribution as a user-defined distribution.
+
+# Solution to the "Compiling R code" problem
+
+```{r, solution, eval=FALSE}
+set.seed(0)
+n <- 1e6
+path <- rep(0, n)
+rho1 <- .8
+rho2 <- .1
+path[1:2] <- rnorm(2)
+print(system.time(
+for(i in 3:n)
+      path[i] <- rho1*path[i-1] + rho2*path[i-2] + rnorm(1)
+))
+nplot <- 5000
+plot(seq_len(nplot), path[seq_len(nplot)], type = 'l', xlab = 'time')
+
+
+library(nimble)
+mc <- nimbleFunction(
+   run = function(n = double(0), rho1 = double(0), rho2 = double(0)) {
+       returnType(double(1))
+       path <- numeric(n, init = FALSE)
+       path[1] <- rnorm(1)
+       path[2] <- rnorm(1)
+       for(i in 3:n) 
+             path[i] <- rho1*path[i-1] + rho2*path[i-2] + rnorm(1)
+       return(path)
+})
+cmc <- compileNimble(mc)
+set.seed(0)
+system.time(path <- cmc(n, rho1, rho2))
+```
+
+You should see that going to C++ gives us a speedup of approximately 40-fold. 
