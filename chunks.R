@@ -1,3 +1,5 @@
+tsplot <- ts.plot
+
 ## @knitr pump-code
 
 pumpCode <- nimbleCode({ 
